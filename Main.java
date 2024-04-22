@@ -4,7 +4,7 @@ import java.util.stream.IntStream;
 import java.util.stream.Stream;
 
 class Main{
-    final static int N = 200;
+    final static int N = 100;
     public static void accurancy(double[] expected, double[] actual){
         double sum = 0;
         double temp = 0;
@@ -21,9 +21,9 @@ class Main{
         Func funcAnsw = (x, y) -> 1;
         Matrix matrix = new Matrix(N, func);
         Matrix f = matrix.multy(new Matrix(N, 1, funcAnsw));
-//        f.printMatrix();
-        double[] actual = Slau.gaus(matrix, f);
+//        matrix.printMatrix();
+//        double[] actual = Slau.gaus(matrix, f);
         double[] expected = IntStream.range(0, N).mapToDouble(x->1).toArray();
-        accurancy(expected, actual);
+        accurancy(expected, Slau.givens(matrix, f));
     }
 }

@@ -44,6 +44,20 @@ public class Matrix {
         }
         return answ;
     }
+    public static Matrix multy(Matrix obj, Matrix obj2){
+        Matrix answ = new Matrix(obj.x, obj2.y);
+        double sum = 0;
+        for (int i=0; i< obj.x; i++){
+            for (int j=0; j<obj2.y; j++){
+                for (int k=0; k<obj2.x; k++){
+                    sum += obj.get(i, k) * obj2.get(k, j);
+                }
+                answ.set(i, j, sum);
+                sum = 0;
+            }
+        }
+        return answ;
+    }
     public void printMatrix(){
         IntStream.range(0, x).forEach(m ->
         {
