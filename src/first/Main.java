@@ -7,7 +7,7 @@ import src.Gaus;
 import java.util.stream.IntStream;
 
 class Main{
-    final static int N = 200;
+    final static int N = 800;
     public static void accurancy(double[] expected, double[] actual){
         double sum = 0;
         double temp = 0;

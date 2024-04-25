@@ -35,6 +35,14 @@ public class Matrix {
         matrix[x][y] = value;
         matrixT[y][x] = value;
     }
+
+//    public Matrix(Matrix matrix){
+//        Matrix m = new Matrix(matrix.x, matrix.y);
+//        IntStream.range(0, m.x).forEach(x -> IntStream.range(0, m.y).forEach(y -> m.set(x, y, m.get(x, y))));
+//    }
+    public void copy(Matrix matrix){
+        IntStream.range(0, this.x).forEach(x -> IntStream.range(0, this.y).forEach(y -> this.set(x, y, matrix.get(x, y))));
+    }
     public static class Tr extends Thread{
         Matrix obj;
         Matrix answ;
@@ -56,6 +64,13 @@ public class Matrix {
             }
         }
 
+    }
+    public Matrix transpose(){
+        Matrix m = new Matrix(y, x);
+        IntStream.range(0, x).forEach(q -> IntStream.range(0, y).forEach(
+                d -> m.set(d, q, get(q, d))
+        ));
+        return m;
     }
 
     public static Matrix multy(Matrix obj, Matrix obj2){
@@ -81,6 +96,23 @@ public class Matrix {
         );
     }
     public double[] getToArray(){
-        return matrix[0];
+        double[] q = new double[this.x];
+        for (int i=0; i<this.x; i++){
+            q[i] = this.get(i, 0);
+        }
+        return q;
     }
+    public void swapRows(int row1, int row2) {
+        if (row1 == row2) {
+            return; // Нет необходимости менять строки, если они одинаковые
+        }
+
+        for (int j = 0; j < this.y; j++) {
+            double temp = get(row1, j);
+            set(row1, j, get(row2, j));
+            set(row2, j, temp);
+        }
+    }
+
+
 }
