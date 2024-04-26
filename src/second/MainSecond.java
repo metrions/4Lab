@@ -7,7 +7,7 @@ import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 
 public class MainSecond {
-    final static int N = 200;
+    final static int N = 20;
     public static void accurancy(double[] expected, double[] actual){
         double sum = 0;
         double temp = 0;
@@ -42,7 +42,7 @@ public class MainSecond {
                         R.set(j, k, temp1);
                         R.set(i, k, temp2);
                     }
-                    R.set(i, j, 0);
+//                    R.set(i, j, 0);
 
                     // Применяем поворот к матрице Q: Q = Q * G
                     for (int k = 0; k < Q.y; k++) {
@@ -73,7 +73,7 @@ public class MainSecond {
 
     public static void main(String... args) throws InterruptedException {
         long start, finish, mean;
-        Func func = (x, y) -> (x!=y)? 3+0.1*(x+1)-0.5*(y+1): 10;
+        Func func = (x, y) -> 1/(2+2*(x+1) + y + 1);
         Func funcAnsw = (x, y) -> 1;
         Matrix matrix = new Matrix(N, func);
         Matrix f = Matrix.multy(matrix, new Matrix(N, 1, funcAnsw));

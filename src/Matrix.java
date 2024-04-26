@@ -43,6 +43,24 @@ public class Matrix {
     public void copy(Matrix matrix){
         IntStream.range(0, this.x).forEach(x -> IntStream.range(0, this.y).forEach(y -> this.set(x, y, matrix.get(x, y))));
     }
+
+    public void Column_Transposition(int i, int j) throws Exception {
+        if (i < 0 || i > y || j < 0 || j > y)
+            throw new Exception("Error in Column_Transposition: indices are not correct...");
+        for (int row = 0; row < x; row++)
+        {
+            var elem = get(row, i);
+            set(row, i, get(row, j));
+            set(row, j, elem);
+        }
+    }
+
+    public void Size_Reduction(int New_M, int New_N) {
+        x = New_M;
+        y = New_N;
+        matrix = new double[x][y];
+    }
+
     public static class Tr extends Thread{
         Matrix obj;
         Matrix answ;
@@ -72,6 +90,7 @@ public class Matrix {
         ));
         return m;
     }
+
 
     public static Matrix multy(Matrix obj, Matrix obj2){
         Matrix answ = new Matrix(obj.x, obj2.y);
@@ -112,5 +131,176 @@ public class Matrix {
         }
     }
 
+    public Matrix Multiplication_Trans_Matrix_Vector (Matrix V) throws Exception {
+//        if (x != V.y) throw new Exception("Mt * V: dim(Matrix) != dim(Vector)...");
+
+        Matrix RES = new Matrix(y, 1);
+
+        for (int i = 0; i < y; i++)
+        {
+            for (int j = 0; j < x; j++)
+            {
+                RES.set(i, 0, RES.get(i, 0) + get(j, i) * V.get(j, 0));
+            }
+        }
+        return RES;
+    }
+
+    public double Cond_InfinityNorm()
+    {
+        //проверка на "квадратность" матрицы
+        if (M != N) throw new Exception("Cond(A): M != N ...");
+
+        //решатель СЛАУ: A^t = QR и решаем системы A^t * A^(-t) = E
+        var QR_Solver = new QR_Decomposition(Transpose_Matrix(), QR_Decomposition.QR_Algorithm.Householder);
+
+        //проверка на невырожденность
+        if (Math.Abs(QR_Solver.R.Elem[M - 1][M - 1]) < CONST.EPS)
+            throw new Exception("Cond(A): detA = 0 ...");
+
+        //число потоков
+        int Number_Threads = Environment.ProcessorCount;
+
+        //семафоры для потоков (по умолчанию false): сигнализируют, что i-ый поток завершился
+        var Semaphores = new bool[Number_Threads];
+
+        //максимальные нормы строк (вычисляются на каждом i-ом потоке)
+        var Norma_Row_A  = new double[Number_Threads];
+        var Norma_Row_A1 = new double[Number_Threads];
+
+        //безымянная функция для решения СЛАУ -> столбцы обратной матрицы
+        //Number - номер потока
+        var Start_Solver = new Thread_Solver((Number) =>
+                {
+                        //строка обратной матрицы
+                        var A1 = new Vector(M);
+        double S1, S2;
+        //первая и последняя обрабатываемые строки для потока
+        int Begin = N / Number_Threads * Number;
+        int End = Begin + N / Number_Threads;
+        //в последний поток добавим остаток
+        if (Number + 1 == Number_Threads) End += N % Number_Threads;
+
+        //решаем системы A^t * A^(-t) = E
+        for (int i = Begin; i < End; i++)
+        {
+            A1.Elem[i] = 1.0;
+            A1 = QR_Solver.Start_Solver(A1);
+
+            S1 = 0; S2 = 0;
+            for (int j = 0; j < M; j++)
+            {
+                S1 += Math.Abs(Elem[i][j]);
+                S2 += Math.Abs(A1.Elem[j]);
+                A1.Elem[j] = 0.0;
+            }
+            if (Norma_Row_A [Number] < S1) Norma_Row_A [Number] = S1;
+            if (Norma_Row_A1[Number] < S2) Norma_Row_A1[Number] = S2;
+        }
+        //сигнал о завершении потока
+        Semaphores[Number] = true;
+            });
+
+        //отцовский поток запускает дочерние
+        for (int I = 0; I < Number_Threads - 1; I++)
+        {
+            int Number = Number_Threads - I - 1;
+            ThreadPool.QueueUserWorkItem((Par) => Start_Solver(Number));
+        }
+
+        //отцовский поток забирает первую порцию строк
+        Start_Solver(0);
+
+        //ожидание отцовским потоком завершения работы дочерних
+        while (Array.IndexOf<bool>(Semaphores, false) != -1);
+
+        //поиск наибольшей нормы
+        for (int i = 1; i < Number_Threads; i++)
+        {
+            if (Norma_Row_A [0] < Norma_Row_A [i]) Norma_Row_A [0] = Norma_Row_A [i];
+            if (Norma_Row_A1[0] < Norma_Row_A1[i]) Norma_Row_A1[0] = Norma_Row_A1[i];
+        }
+
+        return Norma_Row_A[0] * Norma_Row_A1[0];
+    }
+
+    public double Cond_Norm1()
+    {
+        //проверка на "квадратность" матрицы
+        if (M != N) throw new Exception("Cond(A): M != N ...");
+
+        //решатель СЛАУ: A^t = QR и решаем системы A^t * A^(-t) = E
+        var QR_Solver = new QR_Decomposition(this, QR_Decomposition.QR_Algorithm.Householder);
+
+
+        //проверка на невырожденность
+        if (Math.Abs(QR_Solver.R.Elem[M - 1][M - 1]) < CONST.EPS)
+            throw new Exception("Cond(A): detA = 0 ...");
+
+        //число потоков
+        int Number_Threads = Environment.ProcessorCount;
+
+        //семафоры для потоков (по умолчанию false): сигнализируют, что i-ый поток завершился
+        var Semaphores = new bool[Number_Threads];
+
+        //максимальные нормы столбцов (вычисляются на каждом i-ом потоке)
+        var Norma_Column_A  = new double[Number_Threads];
+        var Norma_Column_A1 = new double[Number_Threads];
+
+        //безымянная функция для решения СЛАУ -> столбцы обратной матрицы
+        //Number - номер потока
+        var Start_Solver = new Thread_Solver((Number) =>
+                {
+                        //столбец обратной матрицы
+                        var A1 = new Vector(M);
+        double S1, S2;
+        //первый и последний обрабатываемый столбец для потока
+        int Begin = N / Number_Threads * Number;
+        int End = Begin + N / Number_Threads;
+        //в последний поток добавим остаток
+        if (Number + 1 == Number_Threads) End += N % Number_Threads;
+
+        //решаем системы A * A^(-1) = E
+        for (int i = Begin; i < End; i++)
+        {
+            A1.Elem[i] = 1.0;
+            A1 = QR_Solver.Start_Solver(A1);
+
+            S1 = 0; S2 = 0;
+            for (int j = 0; j < M; j++)
+            {
+                S1 += Math.Abs(Elem[i][j]);
+                S2 += Math.Abs(A1.Elem[j]);
+                A1.Elem[j] = 0.0;
+            }
+            if (Norma_Column_A [Number] < S1) Norma_Column_A [Number] = S1;
+            if (Norma_Column_A1[Number] < S2) Norma_Column_A1[Number] = S2;
+        }
+        //сигнал о завершении потока
+        Semaphores[Number] = true;
+            });
+
+        //отцовский поток запускает дочерние
+        for (int I = 0; I < Number_Threads - 1; I++)
+        {
+            int Number = Number_Threads - I - 1;
+            ThreadPool.QueueUserWorkItem((Par) => Start_Solver(Number));
+        }
+
+        //отцовский поток забирает первую порцию столбцов
+        Start_Solver(0);
+
+        //ожидание отцовским потоком завершения работы дочерних
+        while (Array.IndexOf<bool>(Semaphores, false) != -1);
+
+        //поиск наибольшей нормы
+        for (int i = 1; i < Number_Threads; i++)
+        {
+            if (Norma_Column_A [0] < Norma_Column_A [i]) Norma_Column_A [0] = Norma_Column_A [i];
+            if (Norma_Column_A1[0] < Norma_Column_A1[i]) Norma_Column_A1[0] = Norma_Column_A1[i];
+        }
+
+        return Norma_Column_A[0] * Norma_Column_A1[0];
+    }
 
 }

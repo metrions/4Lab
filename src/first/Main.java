@@ -21,7 +21,7 @@ class Main{
 
     public static void main(String... args) throws InterruptedException {
         long start, finish, mean;
-        Func func = (x, y) -> (x!=y)? 3+0.1*(x+1)-0.5*(y+1): 10;
+        Func func = (x, y) -> 1/(2+2*(x+1) + y + 1);
         Func funcAnsw = (x, y) -> 1;
         Matrix matrix = new Matrix(N, func);
         Matrix f = Matrix.multy(matrix, new Matrix(N, 1, funcAnsw));
