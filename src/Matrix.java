@@ -1,5 +1,9 @@
 package src;
 
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.stream.IntStream;
 
 public class Matrix {
@@ -146,82 +150,91 @@ public class Matrix {
         return RES;
     }
 
-    public double Cond_InfinityNorm()
-    {
+    public double Cond_InfinityNorm() throws Exception {
         //проверка на "квадратность" матрицы
-        if (M != N) throw new Exception("Cond(A): M != N ...");
+//        if (x != y) throw new Exception("Cond(A): M != N ...");
 
         //решатель СЛАУ: A^t = QR и решаем системы A^t * A^(-t) = E
-        var QR_Solver = new QR_Decomposition(Transpose_Matrix(), QR_Decomposition.QR_Algorithm.Householder);
+        var QR_Solver = new QR_Decomposition(transpose(), QR_Decomposition.QR_Algorithm.Householder);
 
         //проверка на невырожденность
-        if (Math.Abs(QR_Solver.R.Elem[M - 1][M - 1]) < CONST.EPS)
+        if (Math.abs(QR_Solver.R.get(x - 1, x - 1)) < 1e-20)
             throw new Exception("Cond(A): detA = 0 ...");
 
         //число потоков
-        int Number_Threads = Environment.ProcessorCount;
+        int Number_Threads = Runtime.getRuntime().availableProcessors();
 
-        //семафоры для потоков (по умолчанию false): сигнализируют, что i-ый поток завершился
-        var Semaphores = new bool[Number_Threads];
+        AtomicBoolean[] Semaphores = new AtomicBoolean[Number_Threads];
+        double[] Norma_Row_A = new double[Number_Threads];
+        double[] Norma_Row_A1 = new double[Number_Threads];
 
-        //максимальные нормы строк (вычисляются на каждом i-ом потоке)
-        var Norma_Row_A  = new double[Number_Threads];
-        var Norma_Row_A1 = new double[Number_Threads];
+        Thread[] threads = new Thread[Number_Threads];
+        for (int i = 0; i < Number_Threads; i++) {
+            int finalI = i;
+            Semaphores[i] = new AtomicBoolean(false);
+            threads[i] = new Thread(() -> {
+                Matrix A1 = new Matrix(x, 1);
+                double S1, S2;
+                int Begin = y / Number_Threads * finalI;
+                int End = Begin + y / Number_Threads;
+                if (finalI + 1 == Number_Threads) End += y % Number_Threads;
 
-        //безымянная функция для решения СЛАУ -> столбцы обратной матрицы
-        //Number - номер потока
-        var Start_Solver = new Thread_Solver((Number) =>
-                {
-                        //строка обратной матрицы
-                        var A1 = new Vector(M);
-        double S1, S2;
-        //первая и последняя обрабатываемые строки для потока
-        int Begin = N / Number_Threads * Number;
-        int End = Begin + N / Number_Threads;
-        //в последний поток добавим остаток
-        if (Number + 1 == Number_Threads) End += N % Number_Threads;
+                for (int j = Begin; j < End; j++) {
+                    A1.set(j, 0, 1.0);
+                    try {
+                        A1 = QR_Solver.Start_Solver(A1);
+                    } catch (Exception e) {
+                        throw new RuntimeException(e);
+                    }
 
-        //решаем системы A^t * A^(-t) = E
-        for (int i = Begin; i < End; i++)
-        {
-            A1.Elem[i] = 1.0;
-            A1 = QR_Solver.Start_Solver(A1);
-
-            S1 = 0; S2 = 0;
-            for (int j = 0; j < M; j++)
-            {
-                S1 += Math.Abs(Elem[i][j]);
-                S2 += Math.Abs(A1.Elem[j]);
-                A1.Elem[j] = 0.0;
-            }
-            if (Norma_Row_A [Number] < S1) Norma_Row_A [Number] = S1;
-            if (Norma_Row_A1[Number] < S2) Norma_Row_A1[Number] = S2;
-        }
-        //сигнал о завершении потока
-        Semaphores[Number] = true;
+                    S1 = 0;
+                    S2 = 0;
+                    for (int k = 0; k < x; k++) {
+                        S1 += Math.abs(get(j, k));
+                        S2 += Math.abs(A1.get(k, 0));
+                        A1.set(k, 0, 0.0);
+                    }
+                    if (Norma_Row_A[finalI] < S1) Norma_Row_A[finalI] = S1;
+                    if (Norma_Row_A1[finalI] < S2) Norma_Row_A1[finalI] = S2;
+                }
+                Semaphores[finalI].set(true);
             });
-
+            threads[i].start();
+        }
+        // Ждем завершения всех потоков
+        for (Thread thread : threads) {
+            try {
+                thread.join();
+            } catch (InterruptedException e) {
+                e.printStackTrace();
+            }
+        }
+        CountDownLatch latch = new CountDownLatch(Number_Threads);
         //отцовский поток запускает дочерние
-        for (int I = 0; I < Number_Threads - 1; I++)
-        {
-            int Number = Number_Threads - I - 1;
-            ThreadPool.QueueUserWorkItem((Par) => Start_Solver(Number));
+        ExecutorService executor = Executors.newFixedThreadPool(Number_Threads);
+
+        for (int i = 0; i < Number_Threads - 1; i++) {
+            final int Number = Number_Threads - i - 1;
+            executor.submit(() -> {
+                Start_Solver(Number, Semaphores, Norma_Row_A, Norma_Row_A1);
+                latch.countDown();
+            });
         }
 
-        //отцовский поток забирает первую порцию строк
-        Start_Solver(0);
+        Start_Solver(0, Semaphores, Norma_Row_A, Norma_Row_A1);
 
-        //ожидание отцовским потоком завершения работы дочерних
-        while (Array.IndexOf<bool>(Semaphores, false) != -1);
+        // Ждем завершения всех дочерних потоков
+        latch.await();
 
-        //поиск наибольшей нормы
-        for (int i = 1; i < Number_Threads; i++)
-        {
-            if (Norma_Row_A [0] < Norma_Row_A [i]) Norma_Row_A [0] = Norma_Row_A [i];
-            if (Norma_Row_A1[0] < Norma_Row_A1[i]) Norma_Row_A1[0] = Norma_Row_A1[i];
+        // поиск наибольшей нормы
+        double maxNorm = Norma_Row_A[0] * Norma_Row_A1[0];
+        for (int i = 1; i < Number_Threads; i++) {
+            if (maxNorm < Norma_Row_A[i] * Norma_Row_A1[i]) {
+                maxNorm = Norma_Row_A[i] * Norma_Row_A1[i];
+            }
         }
 
-        return Norma_Row_A[0] * Norma_Row_A1[0];
+        executor.shutdown();
     }
 
     public double Cond_Norm1()
